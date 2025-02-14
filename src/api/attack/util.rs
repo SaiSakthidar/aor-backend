@@ -650,6 +650,9 @@ pub fn get_defenders(
             level: defender.level,
             current_health: defender.max_health,
             max_health: defender.max_health,
+            range: prop.range,
+            frequency: prop.frequency,
+            last_attack: 0,
         })
     }
     // Sorted to handle multiple defenders attack same attacker at same frame
@@ -732,6 +735,9 @@ pub fn get_hut_defender(
             level: defender_type.level,
             current_health: defender_type.max_health,
             max_health: defender_type.max_health,
+            range: 0,
+            frequency: 0,
+            last_attack:0 ,
         });
         log::info!("hut_defenders {:?}", i);
     }

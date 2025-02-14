@@ -34,6 +34,104 @@ pub fn game_handler(
     let exploded_mines_result: Vec<MineResponse>;
     let base_items_damaged_result: BaseItemsDamageResponse;
     match socket_request.action_type {
+        ActionType::CheckBullets => {
+            if _game_state.last_processed_frame == 0 {
+                _game_state.last_processed_frame = socket_request.frame_number - 1;
+            }
+
+            // Strict sequence validation
+            if socket_request.frame_number <= _game_state.last_processed_frame {
+                return Some(Ok(SocketResponse {
+                    frame_number: socket_request.frame_number,
+                    result_type: ResultType::Nothing,
+                    is_alive: Some(true),
+                    attacker_health: Some(_game_state.attacker.as_ref().unwrap().attacker_health),
+                    exploded_mines: None,
+                    defender_damaged: None,
+                    total_damage_percentage: Some(_game_state.damage_percentage),
+                    is_sync: false,
+                    is_game_over: false,
+                    message: Some(String::from("Skipped repeated or invalid frame")),
+                    bullet_hits: Some(vec![]),
+                    revealed_mines: None,
+                    hut_defenders: None,
+                    hut_triggered: false,
+                    companion: None,
+                    damaged_base_items: None,
+                    shoot_bullets: None,
+                }));
+            }
+
+            // Process only new frames
+            let ranged_attack_result =
+                _game_state.defender_ranged_attack(socket_request.frame_number, socket_request.current_position.unwrap());
+            _game_state.last_processed_frame = socket_request.frame_number;
+            return Some(Ok(SocketResponse {
+                frame_number: socket_request.frame_number,
+                result_type: ResultType::BulletHit,
+                is_alive: Some(true),
+                attacker_health: Some(ranged_attack_result.attacker_health),
+                exploded_mines: None,
+                defender_damaged: None,
+                total_damage_percentage: Some(_game_state.damage_percentage),
+                is_sync: false,
+                is_game_over: false,
+                message: Some(String::from("Bullet Hit")),
+                bullet_hits: Some(ranged_attack_result.bullet_hits),
+                revealed_mines: None,
+                hut_defenders: None,
+                hut_triggered: false,
+                companion: None,
+                damaged_base_items: None,
+                shoot_bullets: None,
+            }));
+        }
+
+        ActionType::UavStatus => {
+            let revealed_mine = _game_state.check_uav_reveal();
+            if let Some(ref revealed_mines) = revealed_mine {
+                return Some(Ok(SocketResponse {
+                    frame_number: socket_request.frame_number,
+                    result_type: ResultType::UAV,
+                    is_alive: Some(true),
+                    attacker_health: None,
+                    exploded_mines: None,
+                    defender_damaged: None,
+                    total_damage_percentage: Some(_game_state.damage_percentage),
+                    is_sync: false,
+                    is_game_over: false,
+                    message: Some(String::from("UAV Reveal")),
+                    bullet_hits: None,
+                    revealed_mines: Some(revealed_mines.clone()),
+                    hut_defenders: None,
+                    hut_triggered: false,
+                    damaged_base_items: None,
+                    shoot_bullets: None,
+                    companion: None,
+                }));
+            } else {
+                return Some(Ok(SocketResponse {
+                    frame_number: socket_request.frame_number,
+                    result_type: ResultType::UAV,
+                    is_alive: Some(true),
+                    attacker_health: None,
+                    exploded_mines: None,
+                    defender_damaged: None,
+                    total_damage_percentage: Some(_game_state.damage_percentage),
+                    is_sync: false,
+                    is_game_over: false,
+                    message: Some(String::from("No UAV Reveal")),
+                    bullet_hits: None,
+                    revealed_mines: None,
+                    hut_defenders: None,
+                    hut_triggered: false,
+                    damaged_base_items: None,
+                    shoot_bullets: None,
+                    companion: None,
+                }));
+            }
+        }
+
         ActionType::PlaceAttacker => {
             _game_state.update_frame_number(socket_request.frame_number);
             let mut event_response = EventResponse {
@@ -115,6 +213,8 @@ pub fn game_handler(
                     "Place Attacker, set attacker and bomb response",
                 )),
                 companion: None,
+                bullet_hits: None,
+                revealed_mines: None,
             }));
         }
         ActionType::PlaceCompanion => {
@@ -169,6 +269,8 @@ pub fn game_handler(
                 message: Some(String::from("Placed companion")),
                 companion: None,
                 shoot_bullets: None,
+                bullet_hits: None,
+                revealed_mines: None,
             }));
         }
 
@@ -295,6 +397,8 @@ pub fn game_handler(
                     shoot_bullets: Some(shoot_bullets),
                     message: Some(String::from("Movement Response")),
                     companion: Some(companion_res),
+                    bullet_hits: None,
+                    revealed_mines: None,
                 };
                 return Some(Ok(response));
             }
@@ -351,6 +455,8 @@ pub fn game_handler(
                 shoot_bullets: None,
                 message: Some(String::from("Is Mine Response")),
                 companion: None,
+                bullet_hits: None,
+                revealed_mines: None,
             }));
         }
         ActionType::PlaceBombs => {
@@ -437,6 +543,8 @@ pub fn game_handler(
                 shoot_bullets: None,
                 message: Some(String::from("Place Bomb Response")),
                 companion: None,
+                bullet_hits: None,
+                revealed_mines: None,
             }));
         }
         ActionType::Idle => {
@@ -461,6 +569,8 @@ pub fn game_handler(
                 shoot_bullets: None,
                 message: Some(String::from("Idle Response")),
                 companion: None,
+                bullet_hits: None,
+                revealed_mines: None,
             }));
         }
         ActionType::Terminate => {
@@ -485,6 +595,8 @@ pub fn game_handler(
                 shoot_bullets: None,
                 message: Some(String::from("Game over")),
                 companion: None,
+                bullet_hits: None,
+                revealed_mines: None,
             };
             return Some(Ok(socket_response));
         }
@@ -514,6 +626,8 @@ pub fn game_handler(
                 shoot_bullets: None,
                 message: Some(String::from("Self Destructed")),
                 companion: None,
+                bullet_hits: None,
+                revealed_mines: None,
             };
 
             return Some(Ok(socket_response));
