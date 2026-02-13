@@ -1166,6 +1166,7 @@ pub fn can_attack_happen(conn: &mut PgConnection, user_id: i32, is_attacker: boo
     if is_attacker {
         let count: i64 = game
             .filter(attack_id.eq(user_id))
+            .filter(attack_id.ne(defend_id))  // Exclude self-attacks
             .filter(is_game_over.eq(true))
             .filter(date.eq(current_date))
             .count()
@@ -1179,6 +1180,7 @@ pub fn can_attack_happen(conn: &mut PgConnection, user_id: i32, is_attacker: boo
     } else {
         let count: i64 = game
             .filter(defend_id.eq(user_id))
+            .filter(attack_id.ne(defend_id))  // Exclude self-attacks
             .filter(is_game_over.eq(true))
             .filter(date.eq(current_date))
             .count()
@@ -1199,14 +1201,17 @@ pub fn deduct_artifacts_from_building(
     use crate::schema::artifact;
     for building in damaged_buildings.iter() {
         if (building.artifacts_if_damaged) > 0 {
-            diesel::update(artifact::table.find(building.id))
-                .set(artifact::count.eq(artifact::count - building.artifacts_if_damaged))
-                .execute(conn)
-                .map_err(|err| DieselError {
-                    table: "artifact",
-                    function: function!(),
-                    error: err,
-                })?;
+            diesel::sql_query(
+                "UPDATE artifact SET count = GREATEST(0, count - $1) WHERE map_space_id = $2"
+            )
+            .bind::<diesel::sql_types::Integer, _>(building.artifacts_if_damaged)
+            .bind::<diesel::sql_types::Integer, _>(building.id)
+            .execute(conn)
+            .map_err(|err| DieselError {
+                table: "artifact",
+                function: function!(),
+                error: err,
+            })?;
         }
     }
     Ok(())
